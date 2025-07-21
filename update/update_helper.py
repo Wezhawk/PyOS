@@ -34,6 +34,4 @@ os.rename("PyOS-update", "PyOS.py")
 print("Launching updated file...\n\n\n")
 subprocess.run(["python", "PyOS.py", "updated"])
 
-print("Update Completed")
-print("Quitting")
 exit()
