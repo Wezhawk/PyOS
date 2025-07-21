@@ -2,7 +2,7 @@ import requests
 import os
 import subprocess
 
-print("Update helper started")
+print("\n\nUpdate helper started")
 print("Preparing to download update...")
 
 file_url = "https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/PyOS.py"
