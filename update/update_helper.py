@@ -2,7 +2,7 @@ import requests
 import os
 import subprocess
 
-print("Update helper started")
+print("\n\nUpdate helper started")
 print("Preparing to download update...")
 
 file_url = "https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/PyOS.py"
@@ -31,7 +31,7 @@ os.remove("PyOS.py")
 print("Preparing to rename file...")
 os.rename("PyOS-update", "PyOS.py")
 
-print("Launching updated file...")
+print("Launching updated file...\n\n\n")
 subprocess.run(["python", "PyOS.py", "updated"])
 
 print("Update Completed")
