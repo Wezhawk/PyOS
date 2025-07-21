@@ -1,7 +1,7 @@
 print("Booting up and engaging PyOS")
 print("Copyright Wezhawk 2025")
 
-VERSION = 1.0
+VERSION = 0.9
 
 import os
 from datetime import datetime
@@ -185,7 +185,7 @@ def append_file(namepath: str, content_to_append, log_action=True):
         log("Appended File " + namepath, process="System")
     return True
 
-def copy_file(namepath: str, new_namepath: str, log_action=True):
+def copy_file(namepath: str, new_namepath:str, log_action=True):
     if file_exists(namepath):
         old_file_contents = read_file(namepath)
     else:
@@ -203,7 +203,7 @@ def delete_file(namepath: str, log_action=True):
                 index = i + 2
                 while index < len(PyOS_system_lines) and PyOS_system_lines[index] != ".end":
                     index += 1
-                del PyOS_system_lines[i: index + 1]
+                del PyOS_system_lines[i : index + 1]
                 if log_action:
                     log("Deleted File " + namepath, process="System")
                 return True
@@ -348,14 +348,12 @@ def load_system(password: str, filename="PyOS-system", saltfile="PyOS_salt.bin",
             exit()
         return False
 
-
 def check_internet(url="http://www.google.com", timeout=5):
     try:
         requests.get(url, timeout=timeout)
         return True
     except (requests.ConnectionError, requests.Timeout):
         return False
-
 
 def download_file(file_url, file_name, log_action=True, process="System"):
     if not check_internet():
@@ -381,21 +379,17 @@ def download_file(file_url, file_name, log_action=True, process="System"):
             log("Error downloading file " + file_name, process)
         return False
 
-
 def create_os():
     global PyOS_system_lines
     PyOS_system_lines = ["PyOS-valid", "Created: " + get_time_stamp(), ""]
 
     print("Creating initial file structure...")
-    create_file("log.txt", [PURPLE + "(System) " + RESET + f"{get_time_stamp()}: Created File log.txt"],
-                log_action=False)
+    create_file("log.txt", [PURPLE + "(System) " + RESET + f"{get_time_stamp()}: Created File log.txt"],log_action=False)
     create_folder("system")
     create_folder("system/packages")
     create_file("system/packages/installed_packages", [])
     create_file("test.txt", ["This is a test file", "PyOS version 1.0"])
-    create_file("system/command_list",
-                ["log", "mkdir", "read", "cd", "ls", "del", "run", "cp", "exit", "shutdown", "system", "commands",
-                 "help", "passwd", "edit", "package"])
+    create_file("system/command_list", ["log", "mkdir", "read", "cd", "ls", "del", "run", "cp", "exit", "shutdown", "system", "commands", "help", "passwd", "edit", "package"])
     create_file("system/config", [f"VERSION: {VERSION}", f"USERNAME: {username}"])
     create_file("system/message_queue", [])
     print(GREEN + "Finished creating initial file structure" + RESET)
@@ -403,44 +397,6 @@ def create_os():
 
 print("Getting Time...")
 print(get_time_stamp())
-
-print("Checking update...")
-if sys.argv > 1:
-    if sys.argv[1] == "updated":
-        print("Successfully updated!")
-        print("Continuing boot...")
-if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/version", "version",
-                 process="Update Helper"):
-    f = open("version", "r")
-    contents = f.read()
-    try:
-        current_version = int(contents)
-    except Exception as e:
-        print("Error: " + str(e))
-    else:
-        if current_version > VERSION:
-            os.remove("version")
-            print("You are using an outdated version of PyOS")
-            log("Newer system version detected", "Update Helper")
-            conf = ""
-            while conf not in ["y", "n"]:
-                conf = input("Would you like to update? [y or n]")
-            if conf == "n":
-                print("The system will not update")
-                print("Continuing boot...")
-                log("Not updating system", process="Update Helper")
-            elif conf == "y":
-                print("Preparing to download and launch update helper")
-                log("Updating system", process="Update Helper")
-                if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/update_helper.py",
-                                 "update_helper.py", process="Update Helper"):
-                    subprocess.run(["python", "update_helper.py"])
-                    print("Exiting...")
-                    exit()
-                else:
-                    print("Could not download update!")
-                    print("Continuing boot...")
-                    log("Could not download update file", process="Update Helper")
 
 print("Checking for sysfile...")
 if os.path.isfile("PyOS-system"):
@@ -473,11 +429,46 @@ else:
 
     create_os()
 
+print("Checking update...")
+if len(sys.argv) > 1:
+    if sys.argv[1] == "updated":
+        print("Successfully updated!")
+        print("Continuing boot...")
+if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/version", "version", process="Update Helper"):
+    f = open("version", "r")
+    contents = f.read()
+    try:
+        current_version = int(contents)
+    except Exception as e:
+        print("Error: " + str(e))
+    else:
+        if current_version > VERSION:
+            os.remove("version")
+            print("You are using an outdated version of PyOS")
+            log("Newer system version detected", "Update Helper")
+            conf = ""
+            while conf not in ["y", "n"]:
+                conf = input("Would you like to update? [y or n]")
+            if conf == "n":
+                print("The system will not update")
+                print("Continuing boot...")
+                log("Not updating system", process="Update Helper")
+            elif conf == "y":
+                print("Preparing to download and launch update helper")
+                log("Updating system", process="Update Helper")
+                if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/update_helper.py", "update_helper.py", process="Update Helper"):
+                    subprocess.run(["python", "update_helper.py"])
+                    print("Exiting...")
+                    exit()
+                else:
+                    print("Could not download update!")
+                    print("Continuing boot...")
+                    log("Could not download update file", process="Update Helper")
+
 print("Setting current directory...")
 current_directory = ""
 
 print("Preparing non-critical functions...")
-
 
 def show_and_handle_prompt():
     global current_directory
@@ -487,8 +478,7 @@ def show_and_handle_prompt():
         if user_input.startswith(command):
             handle_command(user_input)
             return
-    print(
-        "Command not recognized. \nTo run a script, type 'run <script name>' \nTo access a list a commands type 'commands'\n\n")
+    print("Command not recognized. \nTo run a script, type 'run <script name>' \nTo access a list a commands type 'commands'\n\n")
     return False
 
 def handle_command(user_input):
@@ -596,20 +586,19 @@ def handle_command(user_input):
             list_directory_contents("system/packages")
             return True
         elif arguments[1] == "register":
-            # register_package()
+            #register_package()
             return True
         elif arguments[1] == "update":
-            # update_package()
+            #update_package()
             return True
         else:
-            print(
-                "Subcommand not found\nUsage:\n\tpackage → lists current packages\n\tpackage register → registers a package\n\t package update → updates an existing package")
+            print("Subcommand not found\nUsage:\n\tpackage → lists current packages\n\tpackage register → registers a package\n\t package update → updates an existing package")
     elif arguments[0] == "run":
         print("Warning! This command is not complete. Use with caution!")
         if len(arguments) < 2:
             print("Please enter a script to run\nUsage: run <script>")
         if file_exists(arguments[1]):
-            # run_script(arguments[1])
+            #run_script(arguments[1])
             return True
         else:
             print("File could not be found!")
@@ -657,8 +646,7 @@ def handle_command(user_input):
         elif arguments[1] == "purge":
             conf = ""
             while conf not in ["y", "n"]:
-                conf = input(
-                    "Are you sure you want to purge the system?\n(Will not change master password) [y or n]: ").lower()
+                conf = input("Are you sure you want to purge the system?\n(Will not change master password) [y or n]: ").lower()
             if conf == 'y':
                 print("Preparing to purge and recreate OS...")
                 PyOS_system_lines = []
@@ -676,8 +664,7 @@ def handle_command(user_input):
                 post_system_message(arguments[2], process="User")
         else:
             print("Subcommand not found!")
-            print(
-                "Usage:\n  system messages    → view system messages\n  system post <message>    → post a system message\n  system save        → save current system state\n  system print       → output the internal system list\n  system purge       → wipe and regenerate OS (requires confirmation)")
+            print("Usage:\n  system messages    → view system messages\n  system post <message>    → post a system message\n  system save        → save current system state\n  system print       → output the internal system list\n  system purge       → wipe and regenerate OS (requires confirmation)")
     return False
 
 def get_system_messages():
