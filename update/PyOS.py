@@ -1,7 +1,7 @@
 print("Booting up and engaging PyOS")
 print("Copyright Wezhawk 2025")
 
-VERSION = 0.9
+VERSION = 1.0
 
 import os
 from datetime import datetime
@@ -68,6 +68,8 @@ TURQUOISE_HIGHLIGHT = ESC + '[48;5;80m'
 GRAY = ESC + '[38;5;240m'
 RESET = ESC + '[0m'
 # </editor-fold>
+
+
 
 print("Loading Critical Functions...")
 def get_time_stamp():
