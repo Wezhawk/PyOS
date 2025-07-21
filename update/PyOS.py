@@ -69,8 +69,6 @@ GRAY = ESC + '[38;5;240m'
 RESET = ESC + '[0m'
 # </editor-fold>
 
-
-
 print("Loading Critical Functions...")
 def get_time_stamp():
     current_datetime = datetime.now()
@@ -363,7 +361,6 @@ def download_file(file_url, file_name, log_action=True, process="System"):
             log("No internet connection!", process)
         return False
     try:
-        print("Downloading file...")
         response = requests.get(file_url, stream=True)
         response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
 
@@ -412,6 +409,7 @@ if os.path.isfile("PyOS-system"):
     username = config.get("USERNAME")
 
     set_config_variable("VERSION", VERSION)
+    log("Logged user in", "Security")
 else:
     print(ORANGE + "Warning: Sysfile does not exist" + RESET)
     initial_session = True
@@ -439,8 +437,11 @@ if len(sys.argv) > 1:
 if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/version", "version", process="Update Helper"):
     f = open("version", "r")
     contents = f.read()
+    f.close()
     try:
-        current_version = int(contents)
+        print("Current Version: " + contents)
+        print("Local Version: " + str(VERSION))
+        current_version = float(contents)
     except Exception as e:
         print("Error: " + str(e))
     else:
@@ -450,7 +451,7 @@ if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/ver
             log("Newer system version detected", "Update Helper")
             conf = ""
             while conf not in ["y", "n"]:
-                conf = input("Would you like to update? [y or n]")
+                conf = input("Would you like to update? [y or n]: ")
             if conf == "n":
                 print("The system will not update")
                 print("Continuing boot...")
