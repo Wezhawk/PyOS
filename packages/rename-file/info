@@ -1,0 +1,4 @@
+name: rename-package
+version: 1.0
+commands:
+rename-package
