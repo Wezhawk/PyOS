@@ -14,6 +14,11 @@ import sys
 import requests
 import subprocess
 
+if len(sys.argv) > 1:
+    if sys.argv[1] == "updated":
+        print("Successfully updated!")
+        print("Continuing boot...")
+
 print("Preparing Colors...")
 # <editor-fold desc="ANSI escape codes for text colors">
 ESC = '\x1b'
@@ -430,10 +435,6 @@ else:
     create_os()
 
 print("Checking update...")
-if len(sys.argv) > 1:
-    if sys.argv[1] == "updated":
-        print("Successfully updated!")
-        print("Continuing boot...")
 if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/version", "version", process="Update Helper"):
     f = open("version", "r")
     contents = f.read()
