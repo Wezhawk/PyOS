@@ -1,4 +1,4 @@
-name: rename-package
+name: rename-file
 version: 1.0
 commands:
-rename-package
+rename-file:rename_file(original_file, new_file, log_action=True)
