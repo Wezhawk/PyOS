@@ -20,7 +20,8 @@ try:
 
 except requests.exceptions.RequestException as e:
     print(f"Error downloading file: {e}")
-    print("Update failed. Starting old file and quitting...")
+    print("Update failed. Keeping and starting old file...")
+    print("Quitting")
     subprocess.run(["python", "PyOS.py"])
     exit()
 
