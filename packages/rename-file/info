@@ -1,5 +1,0 @@
-name: rename-file
-version: 1.0
-rename_file(original_file, new_file, log_action=True)
-help:Renames a file\nUsage: rename-file <file_to_rename> <new_name>
-depends:
