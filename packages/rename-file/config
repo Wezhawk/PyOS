@@ -3,6 +3,6 @@ version:1.0
 help:
 rename-file:Renames a file\nUsage: rename-file <file_to_rename> <new_name>
 commands:
-rename-file:rename-file.py/rename_file(original_file, new_file, log_action=True)
+rename-file:rename-file.py/rename_file(original_file, new_file)
 depends:
 PyOS:1.0+
