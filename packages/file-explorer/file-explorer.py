@@ -1,11 +1,11 @@
 import urwid
 
 class FileExplorer:
-    import urwid
     def __init__(self, start_path="system"):
         self.current_path = start_path
         self.file_list = []
         self.selected_files = set()
+        self.main_loop = None
         self.update_file_list()
 
         self.header = urwid.Text(f"📁 {self.current_path}")
@@ -33,15 +33,16 @@ class FileExplorer:
     def open_selected(self):
         selected_name = self.file_list[self.body.focus_position]
         new_path = f"{self.current_path}/{selected_name}"
-        if list_directory_contents(new_path):
+        contents = list_directory_contents(new_path)
+        if contents and isinstance(contents, list):
             self.current_path = new_path
             self.selected_files.clear()
             self.update_file_list()
             self.header.set_text(f"📁 {self.current_path}")
             self.body.body = urwid.SimpleFocusListWalker(self.build_file_widgets())
         else:
-            contents = read_file(new_path)
-            preview = "\n".join(contents[:20]) if contents else "(empty or unreadable)"
+            file_contents = read_file(new_path)
+            preview = "\n".join(file_contents[:20]) if file_contents else "(empty or unreadable)"
             preview_box = urwid.Text(preview)
 
             def return_to_main(btn):
