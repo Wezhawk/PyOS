@@ -14,10 +14,14 @@ import sys
 import requests
 import subprocess
 
+package_commands = {}
+
 if len(sys.argv) > 1:
     if sys.argv[1] == "updated":
         print("Successfully updated!")
         print("Continuing boot...")
+    elif sys.argv[1] == "restarted":
+        os.remove("restarter.py")
 
 print("Preparing Colors...")
 # <editor-fold desc="ANSI escape codes for text colors">
@@ -74,6 +78,36 @@ GRAY = ESC + '[38;5;240m'
 RESET = ESC + '[0m'
 # </editor-fold>
 
+print("Preparing Help Text...")
+command_help_text = {
+                "log": "View or add to the system log.\nUsage:\n  log            → displays the contents of log.txt\n  log <message>  → adds the message to log.txt\n  log clear  → clears the log",
+                "package": "Manage system packages\nUsage:\n\tpackage     → list installed local packages\n\tpackage available     → list available packages\n\tpackage install <package>     → downloads and installs a package",
+                "run": "Runs a scripts\nUsage: run <script>",
+                "passwd": "Changes the system password\nUsage:\n  passwd <new password>",
+                "edit": "Edits a file\nUsage: edit <file>",
+                "mkdir": "Create a new folder in the filesystem.\nUsage:\n  mkdir <folder>",
+                "read": "Display the contents of a file line by line.\nUsage:\n  read <filename>",
+                "cd": "Change the current working directory.\nUsage:\n  cd <folder>\n  cd             → resets to root directory",
+                "ls": "List files and folders within a directory.\nUsage:\n  ls             → lists current directory\n  ls <directory> → lists specified directory",
+                "del": "Delete a file from the system.\nUsage:\n  del <filename>",
+                "cp": "Copy the contents of one file to a new file.\nUsage:\n  cp <source> <destination>",
+                "commands": "Display a list of all available commands.\nUsage:\n  commands",
+                "shutdown": "Safely shut down the PyOS system.\nUsage:\n  shutdown",
+                "exit": "Exit the PyOS system session.\nUsage:\n  exit",
+                "clear": "Clears the console.\nUsage:\n  clear",
+                "help": "Access built-in help documentation.\nUsage:\n  help               → general help overview\n  help <command>     → detailed help for that command",
+                "system": "Run advanced system commands.\nUsage:\n  system messages    → view system messages\n  system post <message>    → post a system message\n  system save        → save current system state\n  system print       → output the internal system list\n  system purge       → wipe and regenerate OS (requires confirmation)\n  system devmode on     → turns on devmode (see 'help devmode')\n  system devmode off     → turns off devmode (see 'help devmode')",
+                "system devmode": (
+                    "Toggle developer mode for PyOS.\n"
+                    "When enabled, PyOS will display and log additional debug information "
+                    "useful for troubleshooting and development.\n"
+                    "Usage:\n"
+                    "  system devmode on   → enable developer mode\n"
+                    "  system devmode off  → disable developer mode"
+),
+
+            }
+
 print("Loading Critical Functions...")
 def get_time_stamp():
     current_datetime = datetime.now()
@@ -99,6 +133,8 @@ def folder_exists(namepath: str):
     return False
 
 def delete_folder(namepath: str, log_action=True):
+    for file in list_directory_contents(namepath):
+        delete_file(file)
     for i in range(len(PyOS_system_lines)):
         if PyOS_system_lines[i] == ".folder" and i + 1 < len(PyOS_system_lines):
             if PyOS_system_lines[i + 1] == namepath:
@@ -116,6 +152,7 @@ def delete_folder(namepath: str, log_action=True):
     return False
 
 def create_file(namepath: str, contents, log_action=True):
+    # Ensure parent folders exist (unchanged)
     path_parts = namepath.split('/')
     folders = path_parts[:-1]
     for i in range(len(folders)):
@@ -125,6 +162,14 @@ def create_file(namepath: str, contents, log_action=True):
 
     if file_exists(namepath):
         return False
+
+    # Normalize contents
+    if isinstance(contents, str):
+        contents = [contents]
+    elif contents is None:
+        contents = []
+    else:
+        contents = list(contents)
 
     PyOS_system_lines.append(".file")
     PyOS_system_lines.append(namepath)
@@ -141,6 +186,7 @@ def file_exists(namepath):
         if PyOS_system_lines[i].startswith(".file"):
             if i + 1 < len(PyOS_system_lines) and PyOS_system_lines[i + 1] == namepath:
                 return True
+    return False
 
 def update_file(namepath: str, updated_contents, log_action=True):
     for i in range(len(PyOS_system_lines)):
@@ -182,7 +228,16 @@ def read_file(namepath: str, log_action=False):
     return False
 
 def append_file(namepath: str, content_to_append, log_action=True):
-    original_file = read_file(namepath)
+    # Normalize to a list of lines
+    if isinstance(content_to_append, str):
+        content_to_append = [content_to_append]
+    elif content_to_append is None:
+        content_to_append = []
+    else:
+        # Ensure it’s a flat list of strings
+        content_to_append = list(content_to_append)
+
+    original_file = read_file(namepath) or []
     for line in content_to_append:
         original_file.append(line)
     update_file(namepath, original_file, log_action=log_action)
@@ -225,32 +280,33 @@ def log(to_log, process="Default"):
 def list_directory_contents(directory, log_action=False):
     contents = []
     if directory.strip() == "":
+        # Root directory: only items without a slash in their name
         for i in range(len(PyOS_system_lines)):
-            line = PyOS_system_lines[i]
-            if line == ".file" and i + 1 < len(PyOS_system_lines):
-                file_path = PyOS_system_lines[i + 1]
-                if "/" not in file_path:
-                    contents.append(file_path)
-            elif line == ".folder" and i + 1 < len(PyOS_system_lines):
-                folder_path = PyOS_system_lines[i + 1]
-                if "/" not in folder_path:
-                    contents.append(folder_path)
+            if i + 1 < len(PyOS_system_lines):
+                line = PyOS_system_lines[i]
+                name = PyOS_system_lines[i + 1]
+                if line in (".file", ".folder") and "/" not in name:
+                    contents.append(name)
     else:
         dir_prefix = directory.rstrip("/") + "/"
         for i in range(len(PyOS_system_lines)):
-            line = PyOS_system_lines[i]
-            if line == ".file" and i + 1 < len(PyOS_system_lines):
-                file_path = PyOS_system_lines[i + 1]
-                sub_path = file_path[len(dir_prefix):]
-                if file_path.startswith(dir_prefix) and "/" not in sub_path:
-                    contents.append(file_path)
-            elif line == ".folder" and i + 1 < len(PyOS_system_lines):
-                folder_path = PyOS_system_lines[i + 1]
-                sub_path = folder_path[len(dir_prefix):]
-                if folder_path.startswith(dir_prefix) and "/" not in sub_path:
-                    contents.append(folder_path)
+            if i + 1 < len(PyOS_system_lines):
+                line = PyOS_system_lines[i]
+                path = PyOS_system_lines[i + 1]
+                if path.startswith(dir_prefix):
+                    sub_path = path[len(dir_prefix):]
+                    # Only include immediate children (no extra '/')
+                    if "/" not in sub_path and sub_path != "":
+                        contents.append(sub_path)  # store only the filename
+
+    # Special case cleanup
+    if directory == "system/packages":
+        if "packages" in contents:
+            contents.remove("packages")
+
     if log_action:
         log("Listed contents of directory: " + directory, process="System")
+
     return contents
 
 def get_config_variables(filepath='system/config', log_action=False):
@@ -353,12 +409,78 @@ def load_system(password: str, filename="PyOS-system", saltfile="PyOS_salt.bin",
             exit()
         return False
 
+def restart_system():
+    print("Restarting system...")
+    with open('restarter.py', 'w') as f:
+        f.write("""
+import time
+import subprocess
+time.sleep(.5)
+subprocess.run(["python", "PyOS.py", "restarted"])
+                """)
+    save_state()
+    subprocess.run(["python", "restarter.py"])
+    exit()
+
 def check_internet(url="http://www.google.com", timeout=5):
     try:
         requests.get(url, timeout=timeout)
         return True
     except (requests.ConnectionError, requests.Timeout):
         return False
+
+def version_to_tuple(version_str):
+    """Convert version string like '1.2.3' to tuple (1, 2, 3) for comparison."""
+    return tuple(int(x) for x in version_str.split("."))
+
+def check_version_satisfies(current_version, requirement):
+    """Check if current_version meets the requirement string."""
+    if requirement.endswith("+"):
+        min_version = requirement[:-1]
+        return version_to_tuple(current_version) >= version_to_tuple(min_version)
+    elif "-" in requirement:
+        min_version, max_version = requirement.split("-", 1)
+        return (version_to_tuple(min_version) <= version_to_tuple(current_version) <= version_to_tuple(max_version))
+    else:
+        return version_to_tuple(current_version) == version_to_tuple(requirement)
+
+def check_dependencies(dependencies, source_package=None, auto_install=False):
+    """
+    Checks a list of (dep_name, dep_version) tuples.
+    If auto_install=True, will offer to install missing packages.
+    Returns (ok, unmet_deps) where ok is True if all deps are satisfied.
+    """
+    config_vars = get_config_variables()
+    pyos_version = config_vars.get("VERSION", "0.0")
+    unmet_deps = []
+
+    for dep_name, dep_version in dependencies:
+        if dep_name.lower() == "pyos":
+            if not check_version_satisfies(pyos_version, dep_version):
+                unmet_deps.append(f"Requires PyOS {dep_version}, current is {pyos_version}")
+        else:
+            # Check if required package is installed
+            if not folder_exists(f"system/packages/{dep_name}"):
+                unmet_deps.append(f"Missing package: {dep_name}")
+                if auto_install:
+                    choice = input(f"Dependency '{dep_name}' is missing. Install it now? (y/n): ").strip().lower()
+                    if choice == "y":
+                        if install_package(dep_name):
+                            print(f"Installed dependency '{dep_name}' successfully.")
+                        else:
+                            print(f"Failed to install dependency '{dep_name}'.")
+                            return False, unmet_deps
+            else:
+                # Optional: check version of the dependency package
+                dep_config = read_file(f"system/packages/{dep_name}/config")
+                for dep_line in dep_config:
+                    if dep_line.startswith("version:"):
+                        installed_version = dep_line.split("version:", 1)[1].strip()
+                        if not check_version_satisfies(installed_version, dep_version):
+                            unmet_deps.append(f"{dep_name} version {dep_version} required, found {installed_version}")
+                        break
+
+    return (len(unmet_deps) == 0, unmet_deps)
 
 def download_file(file_url, file_name, log_action=True, process="System"):
     if not check_internet():
@@ -391,11 +513,15 @@ def create_os():
     create_file("log.txt", [PURPLE + "(System) " + RESET + f"{get_time_stamp()}: Created File log.txt"],log_action=False)
     create_folder("system")
     create_folder("system/packages")
-    create_file("system/packages/installed_packages", [])
+    create_folder("system/temp")
+    create_file("system/package-list", [])
+    create_file("system/packages/", [])
     create_file("test.txt", ["This is a test file", "PyOS version 1.0"])
-    create_file("system/command_list", ["log", "mkdir", "read", "cd", "ls", "del", "run", "cp", "exit", "shutdown", "system", "commands", "help", "passwd", "edit", "package"])
+    create_file("system/command_list", ["log", "mkdir", "read", "cd", "ls", "del", "run", "cp", "exit", "shutdown", "system", "commands", "help", "passwd", "edit", "package", "restart", "clear"])
     create_file("system/config", [f"VERSION: {VERSION}", f"USERNAME: {username}"])
+    set_config_variable("DEVELOPER_MODE", "False", log_action=False)
     create_file("system/message_queue", [])
+
     print(GREEN + "Finished creating initial file structure" + RESET)
     print("Booting into OS...")
 
@@ -439,6 +565,7 @@ if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/ver
     f = open("version", "r")
     contents = f.read()
     f.close()
+    os.remove("version")
     try:
         print("Current Version: " + contents)
         print("Local Version: " + str(VERSION))
@@ -447,7 +574,6 @@ if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/ver
         print("Error: " + str(e))
     else:
         if current_version > VERSION:
-            os.remove("version")
             print("You are using an outdated version of PyOS")
             log("Newer system version detected", "Update Helper")
             conf = ""
@@ -462,6 +588,7 @@ if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/ver
                 log("Updating system", process="Update Helper")
                 if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/update_helper.py", "update_helper.py", process="Update Helper"):
                     subprocess.run(["python", "update_helper.py"])
+                    os.remove("update_helper.py")
                     print("Exiting...")
                     exit()
                 else:
@@ -472,6 +599,288 @@ if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/update/ver
 print("Setting current directory...")
 current_directory = ""
 
+print("Loading Package Management Functions...")
+
+def install_package(package_to_install):
+    print(f"Installing package {package_to_install}...")
+
+    # Base URL for the package
+    base_url = f"https://raw.githubusercontent.com/Wezhawk/PyOS/refs/heads/main/packages/{package_to_install}"
+
+    # 1. Download config to OS temp file
+    temp_os_path = f"temp_{package_to_install}_config"
+    if not download_file(base_url + "/config", temp_os_path):
+        print(f"Error: Could not download config for {package_to_install}")
+        return False
+
+    # 2. Read config from OS filesystem
+    with open(temp_os_path, "r", encoding="utf-8") as f:
+        package_config_lines = [line.rstrip("\n") for line in f]
+    os.remove(temp_os_path)
+
+    # 3. Parse dependencies, commands, and file entries
+    dependencies = []
+    parsing_depends = False
+    parsing_commands = False
+    files_to_download = []
+    functions = []
+
+    for line in package_config_lines:
+        stripped = line.strip()
+        if stripped == "depends:":
+            parsing_depends = True
+            parsing_commands = False
+            continue
+        if stripped == "commands:":
+            parsing_commands = True
+            parsing_depends = False
+            continue
+        if parsing_depends and ":" in stripped:
+            dep_name, dep_version = stripped.split(":", 1)
+            dependencies.append((dep_name.strip(), dep_version.strip()))
+        if parsing_commands and ":" in stripped:
+            _, function_def = stripped.split(":", 1)
+            functions.append(function_def.strip())
+        if stripped.startswith("file:"):
+            rel_path = stripped.split("file:", 1)[1].strip()
+            files_to_download.append(rel_path)
+
+    # 4. Auto-add missing files from commands
+    for func_def in functions:
+        if "/" in func_def:
+            file_to_run = func_def.split("/", 1)[0]
+        elif "-" in func_def:
+            file_to_run = func_def.split("-", 1)[0]
+        else:
+            continue
+        if file_to_run not in files_to_download:
+            files_to_download.append("/" + file_to_run)
+
+    # 5. Check dependencies
+    ok, unmet = check_dependencies(dependencies, auto_install=True)
+    if not ok:
+        print(f"Cannot install {package_to_install} due to unmet dependencies:")
+        for dep in unmet:
+            print(f"  - {dep}")
+        return False
+
+    # 6. Create package folder in PyOS FS and save config
+    create_folder(f"system/packages/{package_to_install}")
+    create_file(f"system/packages/{package_to_install}/config", package_config_lines)
+
+    # 7. Download all required files (resolve relative paths)
+    for rel_path in files_to_download:
+        file_url = base_url + rel_path
+        local_os_temp = rel_path.split("/")[-1]
+        if not download_file(file_url, local_os_temp):
+            print(f"Error: Could not download {file_url}")
+            continue
+        with open(local_os_temp, "r", encoding="utf-8") as f:
+            file_contents = [line.rstrip("\n") for line in f]
+        os.remove(local_os_temp)
+        create_file(f"system/packages/{package_to_install}/{local_os_temp}", file_contents, log_action=False)
+
+    print(f"Package {package_to_install} installed successfully.")
+    load_packages()
+    return True
+
+def load_packages(log_action=True):
+    global package_commands
+    packages = list_directory_contents("system/packages")
+
+    for package in packages:
+        config_path = f"system/packages/{package}/config"
+        if not file_exists(config_path):
+            print(f"Error: Package config file for package {package} does not exist")
+            if log_action:
+                log(f"Missing config file for package {package}", process="Package Manager")
+            continue
+
+        package_config = read_file(config_path)
+        commands = []
+        functions = []
+        help_texts = {}  # per-command help
+        dependencies = []
+        parsing_commands = False
+        parsing_depends = False
+        parsing_help = False
+
+        # Parse package config
+        for line in package_config:
+            stripped = line.strip()
+
+            if stripped == "commands:":
+                parsing_commands = True
+                parsing_depends = False
+                parsing_help = False
+                continue
+            if stripped == "help:":
+                parsing_help = True
+                parsing_commands = False
+                parsing_depends = False
+                continue
+            if stripped == "depends:":
+                parsing_depends = True
+                parsing_commands = False
+                parsing_help = False
+                continue
+
+            if parsing_commands and ":" in stripped:
+                cmd_name, function_def = stripped.split(":", 1)
+                commands.append(cmd_name.strip())
+                functions.append(function_def.strip())
+
+            if parsing_help and ":" in stripped:
+                cmd_name, help_str = stripped.split(":", 1)
+                help_texts[cmd_name.strip()] = help_str.strip().replace("\\n", "\n")
+
+            if parsing_depends and ":" in stripped:
+                dep_name, dep_version = stripped.split(":", 1)
+                dependencies.append((dep_name.strip(), dep_version.strip()))
+
+        # Dependency check
+        ok, unmet = check_dependencies(dependencies)
+        if not ok:
+            print(f"Skipping package {package} due to unmet dependencies:")
+            for dep in unmet:
+                print(f"  - {dep}")
+            if log_action:
+                log(f"Skipped package {package} due to unmet dependencies: {', '.join(unmet)}", process="Package Manager")
+            continue
+
+        if not commands or not functions or len(commands) != len(functions):
+            print(f"Error with incomplete values on package {package}! Not loading package")
+            if log_action:
+                log(f"Incomplete values in package {package}", process="Package Manager")
+            continue
+
+        # Load and execute package functions globally
+        for func_def in functions:
+            if "/" in func_def:
+                file_to_run, _ = func_def.split("/", 1)
+            elif "-" in func_def:
+                file_to_run, _ = func_def.split("-", 1)
+            else:
+                print(f"Error: Invalid function format in package {package}")
+                continue
+
+            file_path = f"system/packages/{package}/{file_to_run}"
+            if not file_exists(file_path):
+                print(f"Error: Missing file {file_to_run} in package {package}")
+                if log_action:
+                    log(f"Missing file {file_to_run} in package {package}", process="Package Manager")
+                continue
+
+            code_to_run = read_file(file_path)
+            exec("\n".join(code_to_run), globals())  # <-- ensures functions are globally available
+
+        # Store commands with required argument counts and help text
+        for cmd, func_def in zip(commands, functions):
+            if "(" in func_def and func_def.endswith(")"):
+                args_str = func_def.split("(", 1)[1][:-1].strip()
+                if args_str == "":
+                    argument_num = 0
+                else:
+                    args_list = [a.strip() for a in args_str.split(",")]
+                    argument_num = sum(1 for a in args_list if "=" not in a)
+            else:
+                argument_num = 0
+
+            if "/" in func_def:
+                function_name = func_def.split("/", 1)[1].split("(")[0]
+            elif "-" in func_def:
+                function_name = func_def.split("-", 1)[1].split("(")[0]
+            else:
+                function_name = func_def.split("(")[0]
+
+            package_commands[cmd] = f"{function_name}({argument_num})"
+
+            if cmd in help_texts:
+                command_help_text[cmd] = help_texts[cmd]
+
+        print("Reloaded package " + package)
+
+    print("Successfully reloaded packages")
+    get_outdated_packages()
+    if log_action:
+        log("Reloaded packages", process="Package Manager")
+    return True
+
+def remove_package(package_to_remove, log_action=True):
+    delete_folder("system/packages/" + package_to_remove)
+    load_packages()
+    if log_action:
+        log("Removed package " + package_to_remove, process="Package Manager")
+    print("Removed package " + package_to_remove)
+
+def check_if_package_outdated(package, log_action=False):
+    if download_file(f"https://raw.githubusercontent.com/Wezhawk/PyOS/main/packages/{package}/config", "package_to_check_config", process="Package Manager"):
+        with open("package_to_check_config") as f:
+            package_config = f.read().split("\n")
+            create_file("system/temp/package_config", package_config, log_action=False)
+            config = get_config_variables("system/temp/package_config")
+            latest_package_version = config.get("version")
+            config = get_config_variables("system/packages/" + package + "/config")
+            current_package_version = config.get("version")
+            delete_file("system/temp/package_config", log_action=False)
+            if float(latest_package_version) > float(current_package_version):
+                return True
+            else:
+                return False
+
+def get_outdated_packages():
+    packages = list_directory_contents("system/packages")
+    outdated_packages = []
+    for package in packages:
+        if check_if_package_outdated(package):
+            outdated_packages.append(package)
+    if outdated_packages:
+        print("The following package(s) are outdated:")
+        for package in outdated_packages:
+            print("\t" + package)
+        print("You can updated packages with 'package update <package>'")
+
+def update_package(package_to_update, log_action=True):
+    if remove_package(package_to_update, log_action=False):
+        if install_package(package_to_update, log_action=False):
+            load_packages()
+        else:
+            print("Failed to update package " + package_to_update)
+            if log_action:
+                log("Failed to update package " + package_to_update, process="Package Manager")
+            return False
+    else:
+        print("Failed to update package " + package_to_update)
+        if log_action:
+            log("Failed to update package " + package_to_update, process="Package Manager")
+        return False
+    print("Updated package " + package_to_update)
+    if log_action:
+        log("Updated package " + package_to_update, process="Package Manager")
+    return True
+
+print("Updating package list and loading packages...")
+package_list_downloaded = False
+def update_package_list(log_action=True):
+    global package_list_downloaded
+    if download_file("https://raw.githubusercontent.com/Wezhawk/PyOS/main/packages/package-list", "package-list", process="Package Manager"):
+        f = open("package-list")
+        packages = f.read()
+        package_list = packages.split("\n")
+        update_file("system/package-list", package_list)
+        if log_action:
+            log("Updated package list", process="Package Manager")
+        f.close()
+        os.remove("package-list")
+        package_list_downloaded = True
+    else:
+        if log_action:
+            log("Could not update package list", "Package Manager")
+        package_list_downloaded = False
+
+update_package_list()
+load_packages()
+
 print("Preparing non-critical functions...")
 
 def show_and_handle_prompt():
@@ -481,6 +890,10 @@ def show_and_handle_prompt():
     for command in command_list:
         if user_input.startswith(command):
             handle_command(user_input)
+            return
+    for command in package_commands:
+        if user_input.startswith(command):
+            handle_package_command(user_input)
             return
     print("Command not recognized. \nTo run a script, type 'run <script name>' \nTo access a list a commands type 'commands'\n\n")
     return False
@@ -515,7 +928,7 @@ def handle_command(user_input):
         if len(arguments) < 2:
             print("Please enter a file to read")
             return False
-        file_to_read = read_file(arguments[1])
+        file_to_read = read_file(current_directory + "/" + arguments[1])
         if not file_to_read:
             print("File could not be found")
             return False
@@ -526,8 +939,14 @@ def handle_command(user_input):
         if len(arguments) < 2:
             current_directory = ""
             return True
-        if folder_exists(arguments[1]):
+        elif current_directory == "" and folder_exists(current_directory + arguments[1]):
             current_directory = arguments[1]
+            return True
+        elif folder_exists(current_directory + "/" + arguments[1]):
+            current_directory = current_directory + "/" + arguments[1]
+            return True
+        elif folder_exists(current_directory + "/" + arguments[1]):
+            current_directory = current_directory + "/" + arguments[1] + "/"
             return True
         else:
             print("Folder not found.")
@@ -564,6 +983,8 @@ def handle_command(user_input):
     elif arguments[0] == "exit":
         exit_os()
         return True
+    elif arguments[0] == "restart":
+        restart_system()
     elif arguments[0] == "passwd":
         global password
         if len(arguments) < 2:
@@ -585,60 +1006,110 @@ def handle_command(user_input):
         text_editor_gui(arguments[1])
         return True
     elif arguments[0] == "package":
-        print("Warning! This command is not complete. Use with caution!")
         if len(arguments) < 2:
-            list_directory_contents("system/packages")
+            print("Currently installed packages:\n")
+            keys_view = package_commands.keys()
+            for command in keys_view:
+                print(command)
             return True
-        elif arguments[1] == "register":
-            #register_package()
-            return True
+        elif arguments[1] == "available":
+            print("Currently available packages:\n")
+            for line in read_file("system/package-list"):
+                print(line)
+        elif arguments[1] == "install":
+            if len(arguments) < 3:
+                print("Please enter a package to install. Use 'help package' for more details")
+                return False
+            elif arguments[2] not in read_file("system/package-list"):
+                print("Package does not exist! Try running 'package update'")
+            else:
+                package_to_install = arguments[2]
+                install_package(package_to_install)
         elif arguments[1] == "update":
-            #update_package()
-            return True
+            if len(arguments) < 2:
+                update_package_list()
+                return True
+            elif arguments[2] not in read_file("system/package-list"):
+                print("Package to update is not installed or does not exist")
+                return False
+            elif not check_if_package_outdated(arguments[2]):
+                print("Package is already latest version")
+            else:
+                update_package(arguments[2])
+        elif arguments[1] == "reload":
+            load_packages()
+        elif arguments[1] == "remove":
+            if len(arguments) < 3:
+                print("Please enter a package to remove")
+                return False
+            elif not arguments[2] in list_directory_contents("system/packages"):
+                print("Package to remove is not installed or does not exist")
+                return False
+            else:
+                remove_package(arguments[2])
         else:
-            print("Subcommand not found\nUsage:\n\tpackage → lists current packages\n\tpackage register → registers a package\n\t package update → updates an existing package")
+            print("Subcommand not found\nUsage:\n\tpackage     → list installed local packages\n\tpackage available     → list available packages\n\tpackage install <package>     → downloads and installs a package")
     elif arguments[0] == "run":
-        print("Warning! This command is not complete. Use with caution!")
         if len(arguments) < 2:
             print("Please enter a script to run\nUsage: run <script>")
-        if file_exists(arguments[1]):
-            #run_script(arguments[1])
+            return True  # stop here if no script name
+
+        script_path = arguments[1]
+        if file_exists(script_path):
+            code_to_run = "\n".join(read_file(script_path))
+            try:
+                exec(code_to_run, globals())
+            except Exception as e:
+                import traceback
+                print(f"Error while running '{script_path}': {e}")
+                # Optional: show full traceback for debugging
+                traceback.print_exc()
             return True
         else:
             print("File could not be found!")
             return False
+    elif arguments[0] == "clear":
+        if os.name == 'nt':  # For Windows
+            os.system('cls')
+        else:  # For macOS and Linux
+            os.system('clear')
+        return True
     elif arguments[0] == "help":
+        # No specific command given
         if len(arguments) < 2:
             print("To access a list of commands, type 'commands'")
             print("If you would like help with a specific command, type 'help <command>'")
             return True
+
+        # Specific command help
+        cmd = arguments[1]
+        if cmd in command_help_text:
+            print(command_help_text[cmd])
         else:
-            command_help_text = {
-                "log": "View or add to the system log.\nUsage:\n  log            → displays the contents of log.txt\n  log <message>  → adds the message to log.txt\n  log clear  → clears the log",
-                "package": "Interfaces with packages\nUsage:\n\tpackage →           lists current packages\n\tpackage register →            registers a package\n\t package update →       updates an existing package",
-                "run": "Runs a scripts\nUsage: run <script>",
-                "passwd": "Changes the system password\nUsage:\n  passwd <new password>",
-                "edit": "Edits a file\nUsage: edit <file>",
-                "mkdir": "Create a new folder in the filesystem.\nUsage:\n  mkdir <folder>",
-                "read": "Display the contents of a file line by line.\nUsage:\n  read <filename>",
-                "cd": "Change the current working directory.\nUsage:\n  cd <folder>\n  cd             → resets to root directory",
-                "ls": "List files and folders within a directory.\nUsage:\n  ls             → lists current directory\n  ls <directory> → lists specified directory",
-                "del": "Delete a file from the system.\nUsage:\n  del <filename>",
-                "cp": "Copy the contents of one file to a new file.\nUsage:\n  cp <source> <destination>",
-                "commands": "Display a list of all available commands.\nUsage:\n  commands",
-                "shutdown": "Safely shut down the PyOS system.\nUsage:\n  shutdown",
-                "exit": "Exit the PyOS system session.\nUsage:\n  exit",
-                "help": "Access built-in help documentation.\nUsage:\n  help               → general help overview\n  help <command>     → detailed help for that command",
-                "system": "Run advanced system commands.\nUsage:\n  system messages    → view system messages\n  system post <message>    → post a system message\n  system save        → save current system state\n  system print       → output the internal system list\n  system purge       → wipe and regenerate OS (requires confirmation)"
-            }
-            print(command_help_text[arguments[1]])
+            print(f"No help entry found for '{cmd}'.")
+            for pkg in list_directory_contents("system/packages"):
+                pkg_config = read_file(f"system/packages/{pkg}/config")
+                if any(line.strip().startswith(f"{cmd}:") for line in pkg_config):
+                    print(f"'{cmd}' is provided by the '{pkg}' package. Check that package's documentation.")
+                    break
+        return True
     elif arguments[0] == "system":
         if len(arguments) < 2:
-            print("Please enter a system command: messages, save, or print")
+            print("Please enter an argument!")
+            print(command_help_text["system"])
             return False
-        if arguments[1] == "messages":
+        elif arguments[1] == "messages":
             for line in get_system_messages():
                 print(line)
+            return True
+        elif arguments[1] == "devmode":
+            if len(arguments) < 3 or arguments[2].lower() not in ["on", "off"]:
+                print("Usage: system devmode on|off")
+                return False
+            new_value = "True" if arguments[2].lower() == "on" else "False"
+            set_config_variable("DEVELOPER_MODE", new_value)
+            print(f"Developer mode set to {new_value}")
+            log(f"Developer mode set to {new_value}", process="System")
             return True
         elif arguments[1] == "save":
             save_state()
@@ -656,6 +1127,7 @@ def handle_command(user_input):
                 PyOS_system_lines = []
                 create_os()
                 save_state()
+                restart_system()
                 return True
             elif conf == 'n':
                 print("Canceling...")
@@ -668,7 +1140,55 @@ def handle_command(user_input):
                 post_system_message(arguments[2], process="User")
         else:
             print("Subcommand not found!")
-            print("Usage:\n  system messages    → view system messages\n  system post <message>    → post a system message\n  system save        → save current system state\n  system print       → output the internal system list\n  system purge       → wipe and regenerate OS (requires confirmation)")
+            print(command_help_text["system"])
+    return False
+
+def handle_package_command(user_input):
+    global current_directory
+    global PyOS_system_lines
+    arguments = user_input.strip().split(" ")
+
+    for command in package_commands:
+        if arguments[0] == command:
+            command_in_register = package_commands[command]
+
+            try:
+                # Find the opening parenthesis
+                open_paren_index = command_in_register.index("(")
+                args_str = command_in_register[open_paren_index + 1:-1].strip()
+
+                # Safely parse argument count
+                if args_str.isdigit():
+                    argument_num = int(args_str)
+                elif args_str == "":
+                    argument_num = 0
+                else:
+                    # Fallback: count commas if somehow a raw arg list slipped in
+                    argument_num = len([a.strip() for a in args_str.split(",") if a.strip()])
+
+            except (ValueError, IndexError) as e:
+                print(f"Warning: Malformed package command entry for '{command}': {command_in_register}")
+                print("Defaulting to zero arguments.")
+                argument_num = 0
+
+            # Check if enough arguments were provided
+            if len(arguments) - 1 < argument_num:
+                print("One or more arguments are missing\nPlease use the help command for more information")
+                return False
+
+            # Extract function name
+            function_name = command_in_register.split("(")[0]
+
+            # Call the function dynamically
+            try:
+                globals()[function_name](*arguments[1:argument_num + 1])
+            except Exception as e:
+                print(f"Error executing package command '{command}': {e}")
+                log(f"Error executing package command '{command}': {e}", process="Package Manager")
+                return False
+
+            return True
+
     return False
 
 def get_system_messages():
@@ -701,7 +1221,7 @@ def text_editor_gui(namepath: str):
             if key == 24:  # Ctrl+X
                 break
             elif key == 15:  # Ctrl+O
-                update_file(namepath, contents)
+                update_file(namepath, [line for line in contents if line.strip()])
                 log(f"Saved file from nano GUI: {namepath}", process="Nano")
             elif key == curses.KEY_DOWN and cursor_y < len(contents) - 1:
                 cursor_y += 1
@@ -743,7 +1263,7 @@ def shutdown_os():
     save_state()
     print("Saved State")
     print("Exiting PyOS...")
-    exit()
+    sys.exit(0)
 
 def exit_os():
     conf = ""
@@ -751,7 +1271,7 @@ def exit_os():
         conf = input("Are you sure you want to quit and not save? [y or n]: ").lower()
     if conf == "y":
         print("Preparing to exit OS...")
-        exit()
+        sys.exit(0)
     else:
         print("Canceling...")
         return False
