@@ -1,0 +1,10 @@
+name:file-explorer
+version:1.0
+help:
+file-explorer:Opens the GUI file explorer\nUsage: file-explorer
+commands:
+file-explorer:main.py/FileExplorer().run()
+on-boot:
+main.py/FileExplorer
+depends:
+PyOS:1.2+
