@@ -1,7 +1,7 @@
 print("Booting up and engaging PyOS")
 print("Copyright Wezhawk 2025")
 
-VERSION = 1.1
+VERSION = 1.2
 
 import os
 from datetime import datetime
@@ -82,10 +82,11 @@ print("Preparing Help Text...")
 command_help_text = {
                 "log": "View or add to the system log.\nUsage:\n  log            → displays the contents of log.txt\n  log <message>  → adds the message to log.txt\n  log clear  → clears the log",
                 "package": "Manage system packages\nUsage:\n\tpackage     → list installed local packages\n\tpackage available     → list available packages\n\tpackage install <package>     → downloads and installs a package",
-                "run": "Runs a scripts\nUsage: run <script>",
+                "run": "Runs a script. This script can be either a python file or a .sh batch script containing commands separated by newlines\nUsage: run <script>",
                 "passwd": "Changes the system password\nUsage:\n  passwd <new password>",
                 "edit": "Edits a file\nUsage: edit <file>",
                 "mkdir": "Create a new folder in the filesystem.\nUsage:\n  mkdir <folder>",
+                "rmdir": "Deletes a folder in the filesystem.\nUsage:\n  rmdir <folder>",
                 "read": "Display the contents of a file line by line.\nUsage:\n  read <filename>",
                 "cd": "Change the current working directory.\nUsage:\n  cd <folder>\n  cd             → resets to root directory",
                 "ls": "List files and folders within a directory.\nUsage:\n  ls             → lists current directory\n  ls <directory> → lists specified directory",
@@ -517,7 +518,7 @@ def create_os():
     create_file("system/package-list", [])
     create_file("system/packages/", [])
     create_file("test.txt", ["This is a test file", "PyOS version 1.0"])
-    create_file("system/command_list", ["log", "mkdir", "read", "cd", "ls", "del", "run", "cp", "exit", "shutdown", "system", "commands", "help", "passwd", "edit", "package", "restart", "clear"])
+    create_file("system/command_list", ["log", "mkdir", "rmdir", "read", "cd", "ls", "del", "run", "cp", "exit", "shutdown", "system", "commands", "help", "passwd", "edit", "package", "restart", "clear"])
     create_file("system/config", [f"VERSION: {VERSION}", f"USERNAME: {username}"])
     set_config_variable("DEVELOPER_MODE", "False", log_action=False)
     create_file("system/message_queue", [])
@@ -924,6 +925,12 @@ def handle_command(user_input):
             return False
         create_folder(arguments[1])
         return True
+    elif arguments[0] == "rmdir":
+        if len(arguments) < 2:
+            print("Error! Please enter a folder name.\nUsage: rmdir <folder>")
+            return False
+        delete_folder(arguments[1])
+        return True
     elif arguments[0] == "read":
         if len(arguments) < 2:
             print("Please enter a file to read")
@@ -1056,15 +1063,22 @@ def handle_command(user_input):
 
         script_path = arguments[1]
         if file_exists(script_path):
-            code_to_run = "\n".join(read_file(script_path))
-            try:
-                exec(code_to_run, globals())
-            except Exception as e:
-                import traceback
-                print(f"Error while running '{script_path}': {e}")
-                # Optional: show full traceback for debugging
-                traceback.print_exc()
-            return True
+            file_ending = script_path.split('.')
+            if file_ending[-1] == 'sh':
+                commands_to_run = read_file(script_path)
+                for command in commands_to_run:
+                    handle_command(command)
+                return True
+            else:
+                code_to_run = "\n".join(read_file(script_path))
+                try:
+                    exec(code_to_run, globals())
+                except Exception as e:
+                    import traceback
+                    print(f"Error while running '{script_path}': {e}")
+                    # Optional: show full traceback for debugging
+                    traceback.print_exc()
+                return True
         else:
             print("File could not be found!")
             return False
